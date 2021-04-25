@@ -2,6 +2,15 @@ import nltk
 import random, string, time
 
 
+def timer(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        print(f'Done. ({time.time() - start}s)')
+        return result
+    return wrapper
+
+
 class CommentClassifier:
     
     def __init__(self):
@@ -26,6 +35,40 @@ class CommentClassifier:
             features[f'contains({word})'] = (word in comment_words)
         return features
 
+    
+    @timer
+    def determine_words(self, data):
+        all_words = []
+
+        for comment in data[:50000]:
+            tokenized_comment = nltk.word_tokenize(comment[0])
+            for word in tokenized_comment:
+                lowercase_word = word.lower()
+                if len(lowercase_word) > 1 and lowercase_word not in self.punctuation and lowercase_word not in self.stopwords:
+                    all_words.append(lowercase_word)
+
+        return all_words
+
+    
+    @timer
+    def construct_fd(self, all_words):
+        return nltk.FreqDist(word for word in all_words)
+
+
+    @timer
+    def determine_word_features(self, fd):
+        return list(fd)[:len(fd) // 20]
+
+
+    @timer
+    def construct_featuresets(self, data):
+        return [(self.extract_features(comment), classification) for (comment, classification) in data[:50000]]
+
+
+    @timer
+    def train_classifier(self, featuresets):
+         return nltk.NaiveBayesClassifier.train(featuresets)
+
 
     def train(self, data):
         """Train the model based on data provided
@@ -34,48 +77,24 @@ class CommentClassifier:
             data (list): Tuples in the format (comment, classification)
         """
 
-        print('Determining all words in training data... ', end='', flush=True)
-        start = time.process_time()
-        all_words = []
         random.shuffle(data)
-        for comment in data[:50000]:
-            tokenized_comment = nltk.word_tokenize(comment[0])
-            for word in tokenized_comment:
-                lowercase_word = word.lower()
-                if len(lowercase_word) > 1 and lowercase_word not in self.punctuation and lowercase_word not in self.stopwords:
-                    all_words.append(lowercase_word)
-        end = time.process_time()
-        print(f'Done. ({end - start}s)')
+
+        print('Determining all words in training data... ', end='', flush=True)
+        all_words = self.determine_words(data)
 
         print('Constructing frequency distribution... ', end='', flush=True)
-        start = time.process_time()
-        fd = nltk.FreqDist(word for word in all_words)
-        end = time.process_time()
-        print(f'Done. ({end - start}s)')
+        fd = self.construct_fd(all_words)
         
         print('Determining word features... ', end='', flush=True)
-        start = time.process_time()
-        self.word_features = list(fd)[:len(fd) // 20]
-        end = time.process_time()
-        print(f'Done. ({end - start}s)')
+        self.word_features = self.determine_word_features(fd)
 
         print('Constructing featuresets... ', end='', flush=True)
-        start = time.process_time()
-        featuresets = [(self.extract_features(comment), classification) for (comment, classification) in data[:50000]]
-        end = time.process_time()
-        print(f'Done. ({end - start}s)')
+        featuresets = self.construct_featuresets(data)
 
-        print('Shuffling featuresets... ', end='', flush=True)
-        start = time.process_time()
         random.shuffle(featuresets)
-        end = time.process_time()
-        print(f'Done. ({end - start}s)')
 
         print('Training classifier... ', end='', flush=True)
-        start = time.process_time()
-        self.classifier = nltk.NaiveBayesClassifier.train(featuresets)
-        end = time.process_time()
-        print(f'Done. ({end - start}s)')
+        self.classifier = self.train_classifier(featuresets)
 
         self.classifier.show_most_informative_features()
         
