@@ -1,14 +1,6 @@
 import nltk
-import random, string, time
-
-
-def timer(func):
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        result = func(*args, **kwargs)
-        print(f'Done. ({time.time() - start}s)')
-        return result
-    return wrapper
+import random, string
+from time_track import timer
 
 
 class CommentClassifier:
@@ -18,9 +10,10 @@ class CommentClassifier:
 
         self.punctuation = set(string.punctuation)
         self.stopwords = set(nltk.corpus.stopwords.words('english'))
+        self.training_size = 50000
 
 
-    def extract_features(self, comment):
+    def extract_features(self, comment: str) -> dict:
         """Extracts the features of a comment
 
         Args:
@@ -32,12 +25,11 @@ class CommentClassifier:
         features = {}
 
         # Tokenize, converting to lower case, removing characters repeating more than 3x, and stripping handles
-        comment_words = nltk.word_tokenize(comment)
-        lowecase_comment_words = [token.lower() for token in comment_words]
+        comment_words = [token.lower() for token in nltk.word_tokenize(comment)]
 
         # Determine if features present
         for word in self.word_features:
-            features[f'contains({word})'] = (word in lowecase_comment_words)
+            features[f'contains({word})'] = (word in comment_words)
 
         return features
 
@@ -57,7 +49,7 @@ class CommentClassifier:
         all_words = []
 
         # Take first 50,0000 data points (assume pre-shuffled)
-        for comment in data[:50000]:
+        for comment in data[:self.training_size]:
 
             # Tokenize, converting to lower case, removing characters repeating more than 3x, and stripping handles
             tokenized_comment = nltk.word_tokenize(comment[0])
@@ -69,6 +61,18 @@ class CommentClassifier:
                     all_words.append(word)
 
         return all_words
+
+
+    @timer
+    def determine_bigrams(self, data: list) -> list:
+        all_bigrams = []
+
+        for comment in data[:self.training_size]:
+            tokenized_comment = nltk.casual_tokenize(comment[0], preserve_case=False, reduce_len=True, strip_handles=True)
+            filtered_comment = [token for token in tokenized_comment if len(token) > 2 and token not in self.punctuation and token not in self.stopwords]
+            all_bigrams += list(nltk.bigrams(filtered_comment))
+
+        return all_bigrams
 
     
     @timer
@@ -97,6 +101,7 @@ class CommentClassifier:
         """
 
         return list(fd)[:len(fd) // 20]
+        # return list(fd)[:1000]
 
 
     @timer
@@ -110,7 +115,7 @@ class CommentClassifier:
             list: Featuresets of training data
         """
 
-        return [(self.extract_features(comment), classification) for (comment, classification) in data[:50000]]
+        return [(self.extract_features(comment), classification) for (comment, classification) in data[:self.training_size]]
 
 
     @timer
@@ -124,6 +129,7 @@ class CommentClassifier:
             NaiveBayesClassifier: Trained model
         """
 
+        # return nltk.NaiveBayesClassifier.train(featuresets)
         return nltk.NaiveBayesClassifier.train(featuresets)
 
 
